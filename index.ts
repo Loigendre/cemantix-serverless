@@ -6,6 +6,11 @@
 // Deno.serve(handler);
 
 // --- Version 2 : appel à l'API word2vec ---
+// --- Version 3 : le mot du joueur est lu dans l'URL (?word=...) ---
+
+// Le mot à deviner reste côté serveur : le joueur ne peut pas le lire dans le front
+const SECRET_WORD = "centrale";
+
 function handlePreFlightRequest(): Response {
   return new Response("Preflight OK!", {
     status: 200,
@@ -18,15 +23,29 @@ function handlePreFlightRequest(): Response {
 
 async function handler(_req: Request): Promise<Response> {
   if (_req.method == "OPTIONS") {
-    handlePreFlightRequest();
+    // Sans return, la réponse du preflight était ignorée et on appelait word2vec pour rien
+    // handlePreFlightRequest();
+    return handlePreFlightRequest();
+  }
+
+  const guessedWord = new URL(_req.url).searchParams.get("word");
+  if (!guessedWord) {
+    return new Response("Missing 'word' query parameter", {
+      status: 400,
+      headers: { "Access-Control-Allow-Origin": "*" },
+    });
   }
 
   const headers = new Headers();
   headers.append("Content-Type", "application/json");
 
+  // const similarityRequestBody = JSON.stringify({
+  //   word1: "centrale",
+  //   word2: "supelec",
+  // });
   const similarityRequestBody = JSON.stringify({
-    word1: "centrale",
-    word2: "supelec",
+    word1: SECRET_WORD,
+    word2: guessedWord.trim().toLowerCase(),
   });
 
   // Typé en RequestInit, sinon TS refuse redirect: string
@@ -45,7 +64,9 @@ async function handler(_req: Request): Promise<Response> {
     if (!response.ok) {
       console.error(`Error: ${response.statusText}`);
       return new Response(`Error: ${response.statusText}`, {
-        status: 200,
+        // On renvoie le vrai statut (ex : 404 pour un mot inconnu) pour que le front détecte l'erreur
+        // status: 200,
+        status: response.status,
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
